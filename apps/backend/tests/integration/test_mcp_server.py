@@ -265,9 +265,46 @@ async def test_add_job_caches_keywords_under_the_pipeline_hash(
         assert stored["company"] == "TechCorp"
 
 
+async def test_agent_job_ingest_normalizes_add_and_update(
+    isolated_db: Database,
+) -> None:
+    posting = "Build real-time data products in Go. Fluent English and US work authorization required."
+    extracted = {
+        "required_skills": [" Go ", "go", "Fluent English", "US work authorization"],
+        "keywords": [
+            "real-time data",
+            "REAL‑TIME DATA",
+            "Design tools for teams to improve operations across the company",
+        ],
+        "experience_requirements": ["5+ years"],
+    }
+    async with connect() as mcp:
+        added = await call(
+            mcp, "add_job", {"job_description": posting, "keywords": extracted}
+        )
+        updated = await call(
+            mcp, "set_job_keywords", {"job_id": added["job_id"], "keywords": extracted}
+        )
+    for job in (added, updated):
+        assert job["job_keywords"]["required_skills"] == ["Go"]
+        assert job["job_keywords"]["keywords"] == ["real-time data"]
+        assert job["job_keywords"]["experience_requirements"] == ["5+ years"]
+
+
 @pytest.mark.parametrize(
     "empty",
-    [{}, {"company": "TechCorp", "role": "Engineer"}, {"required_skills": [" "]}],
+    [
+        {},
+        {"company": "TechCorp", "role": "Engineer"},
+        {"required_skills": [" "]},
+        {
+            "required_skills": [
+                "3 days in office",
+                "English proficiency",
+                "5+ years of experience",
+            ]
+        },
+    ],
 )
 async def test_empty_keyword_payloads_are_rejected_before_caching(
     empty: dict[str, Any],
@@ -831,8 +868,9 @@ async def test_tailor_and_verify_keeps_the_save_when_verification_raises(
     assert len(await isolated_db.list_applications()) == 1
 
 
+@pytest.mark.parametrize("track_application", [True, False])
 async def test_tailor_and_verify_saves_renders_once_and_reports_issues(
-    isolated_db: Database, monkeypatch: pytest.MonkeyPatch
+    isolated_db: Database, monkeypatch: pytest.MonkeyPatch, track_application: bool
 ) -> None:
     rendered = AsyncMock(return_value=render("two-column"))
     monkeypatch.setattr(shared_module, "render_resume_pdf", rendered)
@@ -846,6 +884,7 @@ async def test_tailor_and_verify_saves_renders_once_and_reports_issues(
                 "job_id": job_id,
                 "resume_data": master["resume_data"],
                 "print_settings": {"template": "swiss-two-column"},
+                "track_application": track_application,
             },
         )
         linked = await call(
@@ -853,8 +892,8 @@ async def test_tailor_and_verify_saves_renders_once_and_reports_issues(
         )
     assert result["saved"] is True and result["validation"]["valid"]
     assert linked["job_id"] == job_id
-    assert result["resume"]["application_id"]
-    assert len(await isolated_db.list_applications()) == 1
+    assert bool(result["resume"].get("application_id")) is track_application
+    assert len(await isolated_db.list_applications()) == int(track_application)
     assert result["score"]["keyword_match_percentage"] > 0
     assert result["page_count"] == 1
     assert result["parse_check"]["template"] == "swiss-two-column"

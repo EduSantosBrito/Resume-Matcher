@@ -33,6 +33,8 @@ docker exec -i -w /app/backend resume-matcher python -m app.mcp_server.cli <tool
 
 File arguments are then read inside the container, so pass a whole JSON object on stdin instead: `… add_job - < /abs/path/jobs/.work/add_job.json`. To import a resume file, copy it in first (`docker cp ~/resume.pdf resume-matcher:/tmp/resume.pdf`) and pass `file_path=/tmp/resume.pdf`.
 
+**T3 per vacancy:** follow [`t3-vacancy.md`](t3-vacancy.md) before using a remote instance or researching a company.
+
 ## 1. Set up (once)
 
 Check whether the app is already running:
@@ -106,10 +108,10 @@ Job descriptions come pasted in chat, or as `.md`/`.txt` files in `jobs/` (ignor
 
 1. **Add the job.** Read it and extract the keywords, then:
    `add_job job_description=@/abs/path/jobs/acme.md company="Acme" role="Platform Engineer" keywords:=@/abs/path/jobs/.work/acme-keywords.json`
-   The keywords object has `required_skills`, `preferred_skills`, `experience_requirements`, `education_requirements`, `key_responsibilities` and `keywords` (lists of short strings); company and role go in the `company` and `role` arguments. A job pasted in chat is saved to `jobs/.work/<company>.md` first (scratch, not the batch); files the user saved in `jobs/` are the batch.
+   In `required_skills`, `preferred_skills` and `keywords`, use distinct, short terms actually named by the posting (typically 1–4 words). Split explicit compound duties into their role-specific concepts and keep duty sentences in `key_responsibilities`. Keep years and degrees in `experience_requirements` and `education_requirements`; leave generic eligibility (e.g. work authorization, language fluency, attendance) out of scorable lists. Keep unfamiliar tools and terms in the original language. Company and role go in the `company` and `role` arguments. A job pasted in chat is saved to `jobs/.work/<company>.md` first (scratch, not the batch); files the user saved in `jobs/` are the batch.
 2. **Read the source.** `get_resume resume_id=<master id>`. Start from its `resume_data` exactly as returned, including `sectionMeta` and `customSections`; a copy from anywhere else fails validation.
 3. **Write the tailored version** by the rules below.
-4. **Save and check:** `tailor_and_verify @/abs/path/jobs/.work/acme-tailor.json` with `{"source_resume_id", "job_id", "resume_data", "title": "<Role> @ <Company>"}`. It validates, saves a new resume (the master is untouched), renders the PDF, parse-checks it, scores it and adds an Applied card to the tracker. Call it **once per job**: every successful call adds another resume and tracker card, so fix things afterwards with `update_resume`.
+4. **Save and check:** `tailor_and_verify @/abs/path/jobs/.work/acme-tailor.json` with `{"source_resume_id": "…", "job_id": "…", "resume_data": {…}, "title": "<Role> @ <Company>", "track_application": false}`. It validates, saves a new resume (the master is untouched), renders the PDF, parse-checks it and scores it. Use `track_application: true` only if the user explicitly asks to mark the job Applied. Call it **once per job**: every successful call adds another resume, so fix things afterwards with `update_resume`.
    - The result is long. The fields you need: `saved`, `resume.resume_id`, `score.overall_score`, `score.missing_keywords`, `page_count` and `issues` (`verify_resume` returns the same `score`, `page_count` and `issues`).
    - `saved: false`: nothing was written. Read `validation.violations`, fix them (or adopt `validation.repaired_resume_data`) and call it again.
    - `validation.grounding_warnings` are advisory: check each one against the source and fix anything unsupported.
@@ -176,11 +178,11 @@ The app's AI buttons hand these prompts to you:
 | Request | Tools |
 |---|---|
 | Cover letter | `get_resume_job resume_id=<id>`, write it like the app's default: under one page, 200 to 300 words in 3 or 4 paragraphs (a hook tied to one detail of the job, two or three matching examples from the resume, why this company using what the job description says, a specific close). Greet a named person only if the job names one, else "Dear Hiring Manager"; use only facts from the resume and the job description, `set_cover_letter resume_id=<id> content=@…` |
-| Outreach message | Same, 70 to 100 words, opening with something specific from the job, then `set_outreach_message` |
+| Outreach message | Draft a LinkedIn intro, about 30–50 words or shorter: greeting, role, one factual fit from the resume, and a low-pressure invitation. No fake familiarity or unsupported claim that the recipient posted the job. Save with `set_outreach_message` when requested; never send it. |
 | Enhance a resume | Ask the user about missing results, numbers and tools; then `get_resume`, edit, `update_resume`. Add only what they told you |
 | Rewrite parts | Show the user the changes first, then `update_resume` |
 | Improve writing | Run the two writing rounds from step 6 on that resume, with no job: `get_resume`, critique, rewrite, `update_resume`, `verify_resume` |
-| Interview prep | Answer in the chat from `get_resume` and `get_resume_job`; the app does not store it in agent mode |
+| Interview prep | Follow the [research and prep steps](t3-vacancy.md#interview-prep) and answer in the chat; the app does not store it in agent mode. |
 | PDF file | `export_resume_pdf resume_id=<id>` writes `data/exports/<id>-<template>.pdf` (pass `output_path` for elsewhere), or use **Download** in the editor |
 | Tracker | `list_applications`, `update_application` |
 

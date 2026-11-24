@@ -36,7 +36,11 @@ from app.schemas.models import (
     skills_end_in_open_label,
 )
 from app.services.parser import has_meaningful_resume_content
-from app.services.text_match import keyword_in_text, normalize_skill_key
+from app.services.text_match import (
+    distinct_keyword_terms,
+    keyword_in_text,
+    normalize_skill_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,9 @@ def _validate_keyword_result(result: dict[str, Any]) -> dict[str, Any]:
     """Validate keyword fields consumed by tailoring while allowing sparse output."""
     validated = dict(result)
     for field in ("required_skills", "preferred_skills", "keywords"):
-        validated[field] = _validate_string_list_field(result, field)
+        validated[field] = distinct_keyword_terms(
+            _validate_string_list_field(result, field)
+        )
     for field in (
         "experience_requirements",
         "education_requirements",

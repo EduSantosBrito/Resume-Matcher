@@ -3009,7 +3009,11 @@ def _cached_job_keywords(job: dict[str, Any]) -> dict[str, Any] | None:
         job.get("content", "")
     ):
         return None
-    return keywords
+    # CLI callers can supply company/role separately from the keyword object.
+    return {
+        **keywords,
+        **{key: job[key] for key in ("company", "role") if job.get(key)},
+    }
 
 
 def _scorable_job_keywords(job: dict[str, Any]) -> dict[str, Any] | None:
@@ -3018,7 +3022,7 @@ def _scorable_job_keywords(job: dict[str, Any]) -> dict[str, Any] | None:
     Extraction can return empty lists; such a dict is truthy but scores 0%.
     """
     keywords = _cached_job_keywords(job)
-    if keywords and any(term.strip() for term in job_keyword_terms(keywords)):
+    if keywords and job_keyword_terms(keywords):
         return keywords
     return None
 

@@ -22,8 +22,9 @@ import logging
 import re
 from typing import Any
 
-from app.services.ats_parse.roundtrip import CONDENSED_ORDER
-from app.services.text_match import keyword_in_text
+from app.services.rendered_content import is_section_visible as _is_section_visible
+from app.services.rendered_content import rendered_content as _rendered_content
+from app.services.text_match import distinct_keyword_terms, keyword_in_text
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ def _extract_all_text(data: dict[str, Any]) -> str:
                 _walk(v)
 
     _walk(data)
-    return " ".join(parts)
+    return "\n".join(parts)
 
 
 def _title_tokens(text: str) -> set[str]:
@@ -98,44 +99,6 @@ def _title_tokens(text: str) -> set[str]:
     }
 
 
-def _is_section_visible(resume: dict[str, Any], key: str) -> bool:
-    """A section hidden via sectionMeta is not rendered, so it cannot be parsed."""
-    for meta in resume.get("sectionMeta") or []:
-        if isinstance(meta, dict) and meta.get("key") == key:
-            return meta.get("isVisible", True) is not False
-    return True
-
-
-def _rendered_content(resume: dict[str, Any]) -> dict[str, Any]:
-    """The resume minus what never reaches the page, so an ATS cannot read it.
-
-    Section labels in sectionMeta ("Summary", "Experience", ...) are
-    configuration, not content, and hidden sections are not rendered. A
-    condensed work entry prints only its title, company and years.
-    """
-    content = {
-        key: value
-        for key, value in resume.items()
-        if key != "sectionMeta" and _is_section_visible(resume, key)
-    }
-    work = content.get("workExperience")
-    if isinstance(work, list):
-        content["workExperience"] = [
-            {k: entry.get(k) for k in CONDENSED_ORDER}
-            if isinstance(entry, dict) and entry.get("condensed")
-            else entry
-            for entry in work
-        ]
-    custom = content.get("customSections")
-    if isinstance(custom, dict):
-        content["customSections"] = {
-            key: value
-            for key, value in custom.items()
-            if _is_section_visible(resume, key)
-        }
-    return content
-
-
 def _compute_skills_coverage(
     resume: dict[str, Any],
     job_keywords: dict[str, Any],
@@ -145,9 +108,11 @@ def _compute_skills_coverage(
     Checks how many required_skills / preferred_skills from the JD appear
     in the resume's technicalSkills list (falls back to full-text search).
     """
-    jd_skills: list[str] = []
-    jd_skills.extend(job_keywords.get("required_skills", []))
-    jd_skills.extend(job_keywords.get("preferred_skills", []))
+    jd_skills = distinct_keyword_terms(
+        skill
+        for field in ("required_skills", "preferred_skills")
+        for skill in job_keywords.get(field) or []
+    )
 
     if not jd_skills:
         return 0.0
@@ -310,7 +275,7 @@ def _generate_recommendations(
 
     if keyword_score < 60 and missing_keywords:
         top = ", ".join(missing_keywords[:5])
-        tips.append(f"Add these high-priority missing keywords: {top}.")
+        tips.append(f"Review these job terms against your experience: {top}.")
 
     if injectable_keywords:
         top_injectable = ", ".join(injectable_keywords[:5])
@@ -319,9 +284,7 @@ def _generate_recommendations(
         )
 
     if skills_score < 60:
-        tips.append(
-            "Expand your Skills section to include more of the tools and technologies listed in the job description."
-        )
+        tips.append("Check whether the resume shows relevant skills you already have.")
 
     if section_score < 100:
         tips.append(

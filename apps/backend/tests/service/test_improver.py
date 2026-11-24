@@ -34,6 +34,29 @@ class TestExtractJobKeywords:
         mock_llm.assert_called_once()
 
     @patch("app.services.improver.complete_json", new_callable=AsyncMock)
+    async def test_keeps_specific_terms_and_excludes_eligibility(
+        self, mock_llm: AsyncMock
+    ) -> None:
+        duty = "Facilitate interviews with customers and synthesize what the product team learns"
+        mock_llm.return_value = {
+            "required_skills": [" user research ", "User Research", "Inglês fluente"],
+            "preferred_skills": [],
+            "keywords": [
+                "リアルタイム分析",
+                "decision support",
+                duty,
+                "3 days in office",
+            ],
+            "key_responsibilities": [duty],
+        }
+        result = await extract_job_keywords(
+            f"Product researcher: {duty}; user research and decision support."
+        )
+        assert result["required_skills"] == ["user research"]
+        assert result["keywords"] == ["リアルタイム分析", "decision support"]
+        assert result["key_responsibilities"] == [duty]
+
+    @patch("app.services.improver.complete_json", new_callable=AsyncMock)
     async def test_sanitizes_injection_attempts(self, mock_llm):
         mock_llm.return_value = {
             "required_skills": [],

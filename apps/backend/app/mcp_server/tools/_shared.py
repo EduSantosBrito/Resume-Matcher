@@ -34,6 +34,7 @@ from app.services.resume_preservation import (
     finalize_ai_resume,
     grounding_review_warnings,
 )
+from app.services.text_match import SCORABLE_KEYWORD_FIELDS, distinct_keyword_terms
 
 logger = logging.getLogger(__name__)
 
@@ -194,14 +195,16 @@ def job_view(job: dict[str, Any]) -> dict[str, Any]:
 def keyword_updates(content: str, keywords: JobKeywords) -> dict[str, Any]:
     # Scoring reads only these three lists; an empty payload would still be cached
     # as truthy and score every resume 0% instead of reporting missing keywords.
-    terms = (*keywords.required_skills, *keywords.preferred_skills, *keywords.keywords)
-    if not any(term.strip() for term in terms):
+    normalized = keywords.model_dump()
+    for field in SCORABLE_KEYWORD_FIELDS:
+        normalized[field] = distinct_keyword_terms(normalized[field])
+    if not any(normalized[field] for field in SCORABLE_KEYWORD_FIELDS):
         raise ToolError(
             "keywords must include at least one of required_skills, "
             "preferred_skills or keywords."
         )
     updates: dict[str, Any] = {
-        "job_keywords": keywords.model_dump(),
+        "job_keywords": normalized,
         "job_keywords_hash": _hash_job_content(content),
     }
     if keywords.company.strip():

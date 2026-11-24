@@ -28,8 +28,14 @@ from app.schemas.refinement import (
     RefinementConfig,
     RefinementResult,
 )
+from app.services.rendered_content import rendered_content
 from app.services.resume_preservation import finalize_ai_resume
-from app.services.text_match import keyword_in_text, normalize_skill_key
+from app.services.text_match import (
+    SCORABLE_KEYWORD_FIELDS,
+    distinct_keyword_terms,
+    keyword_in_text,
+    normalize_skill_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +46,7 @@ MIN_TRUNCATION_WARNING_LENGTH = 1500
 
 def count_retained_keywords(keywords: list[str], resume: dict[str, Any]) -> int:
     """Count refinement keywords still present in the finalized resume."""
-    text = _extract_all_text(resume)
+    text = _extract_all_text(rendered_content(resume))
     return sum(keyword_in_text(keyword, text) for keyword in keywords)
 
 
@@ -103,9 +109,8 @@ async def refine_resume(
         keyword_analysis = analyze_keyword_gaps(job_keywords, current, master_resume)
         if keyword_analysis.injectable_keywords:
             logger.info(
-                "Injecting %d keywords: %s",
+                "Considering %d master-backed keywords for refinement",
                 len(keyword_analysis.injectable_keywords),
-                keyword_analysis.injectable_keywords,
             )
             attempts += 1
             before = _deep_copy(current)
@@ -195,6 +200,7 @@ async def refine_resume(
     # Calculate final match percentage
     final_match = calculate_keyword_match(current, job_keywords)
 
+    visible_text = _extract_all_text(rendered_content(current))
     return RefinementResult(
         refined_data=current,
         passes_completed=passes,
@@ -204,7 +210,7 @@ async def refine_resume(
             for keyword in (
                 keyword_analysis.injectable_keywords if keyword_analysis else []
             )
-            if keyword_in_text(keyword, _extract_all_text(current))
+            if keyword_in_text(keyword, visible_text)
         ],
         alignment_violations_fixed=alignment_fixed,
         keyword_analysis=keyword_analysis,
@@ -230,14 +236,11 @@ def analyze_keyword_gaps(
         KeywordGapAnalysis with missing, injectable, and non-injectable keywords
     """
     # Extract text content from resumes
-    tailored_text = _extract_all_text(tailored).lower()
-    master_text = _extract_all_text(master).lower()
+    tailored_text = _extract_all_text(rendered_content(tailored))
+    master_text = _extract_all_text(master)
 
     # Get all keywords from JD
-    all_jd_keywords: set[str] = set()
-    all_jd_keywords.update(jd_keywords.get("required_skills", []))
-    all_jd_keywords.update(jd_keywords.get("preferred_skills", []))
-    all_jd_keywords.update(jd_keywords.get("keywords", []))
+    all_jd_keywords = job_keyword_terms(jd_keywords)
 
     # Find missing keywords
     missing: list[str] = []
@@ -253,9 +256,9 @@ def analyze_keyword_gaps(
                 non_injectable.append(keyword)
 
     # Calculate percentages
-    total = len(all_jd_keywords) if all_jd_keywords else 1
-    current_match = (total - len(missing)) / total * 100
-    potential_match = (total - len(non_injectable)) / total * 100
+    total = len(all_jd_keywords)
+    current_match = (total - len(missing)) / total * 100 if total else 0.0
+    potential_match = (total - len(non_injectable)) / total * 100 if total else 0.0
 
     return KeywordGapAnalysis(
         missing_keywords=missing,
@@ -767,12 +770,11 @@ def fix_alignment_violations(
 
 def job_keyword_terms(jd_keywords: dict[str, Any]) -> list[str]:
     """Distinct JD terms that keyword match is scored on, in posting order."""
-    terms: dict[str, None] = {}
-    for field in ("required_skills", "preferred_skills", "keywords"):
-        for term in jd_keywords.get(field) or []:
-            if isinstance(term, str):
-                terms.setdefault(term, None)
-    return list(terms)
+    return distinct_keyword_terms(
+        term
+        for field in SCORABLE_KEYWORD_FIELDS
+        for term in jd_keywords.get(field) or []
+    )
 
 
 def calculate_keyword_match(
@@ -788,7 +790,7 @@ def calculate_keyword_match(
     Returns:
         Match percentage (0.0 to 100.0)
     """
-    resume_text = _extract_all_text(resume).lower()
+    resume_text = _extract_all_text(rendered_content(resume))
 
     all_keywords = job_keyword_terms(jd_keywords)
 
@@ -885,7 +887,7 @@ def _extract_all_text(data: dict[str, Any]) -> str:
                 if isinstance(items, list):
                     parts.extend(str(i) for i in items)
 
-    return " ".join(p for p in parts if p)
+    return "\n".join(p for p in parts if p)
 
 
 def _deep_copy(data: dict[str, Any]) -> dict[str, Any]:

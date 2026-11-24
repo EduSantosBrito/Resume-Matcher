@@ -1,0 +1,13 @@
+# ATS matching decision
+
+Keep the existing score weights. This comparison checks whether each approach can recover the right evidence and gaps, not whether the score predicts an employer's decision.
+
+| Synthetic fixture | Expected Resume Matcher result | Alternative check |
+| --- | --- | --- |
+| JavaScript and C++/C#; posting asks for Java, C and three spellings of real-time data | 1 of 3 distinct terms; Java and C are gaps | Open ATS's software dictionary includes Java/JavaScript/C++/C# but omits C and real-time data, so a dictionary gate would lose one true hit and one true gap. |
+| Designer has usability testing only in a condensed bullet | 0 visible hits; master-backed gap | The Open ATS software dictionary omits usability testing. A PDF parser can verify the bullet isn't printed but cannot identify master-only evidence. |
+| Japanese analysis phrase adjacent to prose; posting includes Java while resume says JavaScript | CJK hit; no Java hit | The Open ATS software dictionary omits the tested `リアルタイム分析` term. Semantic neighbors can be useful for finding related passages but are not proof of Java or any other specifically required skill. |
+
+Dictionary membership above was checked against the [pinned Open ATS software dictionary](https://github.com/jlynshue/open-ats/blob/1fcff985e0cbcac065518dabebea1b96f1bb802a/keyword_databases/software_engineering.yaml). Its [analyzer](https://github.com/jlynshue/open-ats/blob/1fcff985e0cbcac065518dabebea1b96f1bb802a/src/open_ats/analyzers/keyword.py) weights hard skills, soft skills, action verbs and industry terms; the membership comparison is not a head-to-head score benchmark. [Open Resume's skills extractor](https://github.com/xitanggg/open-resume/blob/4f8255a2c763479837f69f1dccf2a3338730cd79/src/app/lib/parse-resume-from-pdf/extract-resume-from-sections/extract-skills.ts) locates skills in parsed PDF sections; use that type of parser to assess extraction and layout, not to replace job matching. [Sentence Transformers](https://github.com/huggingface/sentence-transformers/blob/f1aeaea05afc91dcc47179e00f9f4f313fab7e9a/examples/sentence_transformer/applications/semantic-search/README.md#retrieve--re-rank) describes retrieval/reranking; no embedding model was benchmarked here.
+
+Before changing weights, build a labeled set of real-world-style, consented or synthetic job/resume pairs across languages and roles. Label exact hits, paraphrases, unrelated near-neighbors and hidden/master-only evidence separately. Compare term precision/recall and evidence passage recall against the exact baseline, keeping PDF parse accuracy and user confirmation of evidence separate from the match score.

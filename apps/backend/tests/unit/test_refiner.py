@@ -637,9 +637,9 @@ class TestCalculateKeywordMatch:
         }
         resume = {"summary": "Python and Terraform"}
         terms = job_keyword_terms(keywords)
-        # Exact duplicates collapse; case variants and posting order are kept.
-        assert terms == ["Python", "Kubernetes", "python", "Terraform"]
-        assert calculate_keyword_match(resume, keywords) == 3 / len(terms) * 100
+        # Case variants collapse, keeping the first spelling and posting order.
+        assert terms == ["Python", "Kubernetes", "Terraform"]
+        assert calculate_keyword_match(resume, keywords) == pytest.approx(66.7, abs=0.1)
 
 
 class TestPreserveDescriptionStyles:

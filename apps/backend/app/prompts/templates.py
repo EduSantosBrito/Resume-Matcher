@@ -202,6 +202,15 @@ Example format:
   "seniority_level": "senior"
 }}
 
+In required_skills, preferred_skills, and keywords, use concise, distinct names
+of role-specific tools, methods, and domain concepts, typically 1-4 words each.
+Split compound duties into individual concepts: user research, usability testing,
+real-time data, decision support. Put full duties in key_responsibilities.
+Keep job-specific domain terms even if uncommon. Exclude generic eligibility
+(language fluency, work authorization, office attendance, relocation, years and
+degrees) from keyword and skill arrays. Keep years and degrees in their own
+requirements fields; do not infer tools or experience that the posting omits.
+
 Extract numeric years (e.g., "5+ years" → 5) and infer seniority level.
 Set "company" to the hiring company name and "role" to the job title exactly as
 written in the posting; use an empty string for either if it is not stated.
@@ -437,7 +446,7 @@ Requirements:
 
 Output plain text only. No JSON, no markdown formatting."""
 
-OUTREACH_MESSAGE_PROMPT = """Generate a cold outreach message for LinkedIn or email about this job opportunity.
+OUTREACH_MESSAGE_PROMPT = """Draft a short LinkedIn introduction about this job opportunity. Do not send it.
 
 IMPORTANT: Write in {output_language}.
 
@@ -448,11 +457,10 @@ Candidate Resume (JSON):
 {resume_data}
 
 Guidelines:
-- 70-100 words maximum (shorter than a cover letter)
-- First sentence: Reference specific detail from job description (team, product, technical challenge) - never open with "I'm reaching out" or "I saw your posting"
-- One sentence on strongest matching qualification with a concrete metric if available
-- End with low-friction ask: "Worth a quick chat?" not "I'd love the opportunity to discuss"
-- Tone: How you'd message a former colleague, not a stranger
+- Aim for 30–50 words; shorter is fine. Open with a brief greeting (use a name only if supplied), then name the role.
+- Give one factual reason the candidate fits, grounded in the resume and a stated requirement. Use a metric only if the resume supplies it.
+- Close with a low-pressure invitation to connect or chat.
+- Write as a polite stranger. Do not imply prior contact or claim the recipient posted the job unless the inputs establish that.
 - Do NOT include placeholder brackets
 - Do NOT use phrases like "excited about" or "passionate about"
 - Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it

@@ -45,6 +45,80 @@ def _resume(**overrides: Any) -> dict[str, Any]:
     return data
 
 
+def test_keyword_score_matches_hyphenated_terms_without_counting_duplicates() -> None:
+    from app.mcp_server.tools._shared import keyword_score
+
+    resume = _resume(summary="Built a real-time data dashboard in JavaScript.")
+    job = {
+        "required_skills": ["real time data", "Java", "C"],
+        "preferred_skills": ["Real-time data"],
+        "keywords": [
+            "REAL\u2011TIME DATA",
+            "Design interactive dashboards to help teams make better decisions",
+        ],
+    }
+    resume["additional"]["technicalSkills"] = ["C++", "C#"]
+
+    result = keyword_score(resume, job, resume)
+
+    assert result["keyword_match_percentage"] == 33.3
+    assert result["sub_scores"]["skills_coverage"] == pytest.approx(100 / 3, abs=0.1)
+    assert set(result["missing_keywords"]) == {"C", "Java"}
+
+
+def test_keyword_score_does_not_count_hidden_work_bullets() -> None:
+    from app.mcp_server.tools._shared import keyword_score
+
+    master = _resume(
+        workExperience=[
+            {"title": "Designer", "description": ["Ran usability testing."]}
+        ]
+    )
+    resume = copy.deepcopy(master)
+    resume["workExperience"][0]["condensed"] = True
+
+    result = keyword_score(resume, {"required_skills": ["usability testing"]}, master)
+
+    assert result["keyword_match_percentage"] == 0
+    assert result["sub_scores"]["skills_coverage"] == 0
+    assert result["injectable_keywords"] == ["usability testing"]
+    assert result["missing_keywords"] == []
+
+
+def test_keyword_score_counts_visible_cjk_but_not_hidden_sections_or_split_terms() -> (
+    None
+):
+    from app.mcp_server.tools._shared import keyword_score
+
+    master = _resume(
+        summary="JavaScriptによるリアルタイム分析を開発。",
+        workExperience=[
+            {"title": "Data analyst", "description": ["Research", "Methods"]}
+        ],
+    )
+    master["additional"]["technicalSkills"] = ["SQL"]
+    resume = copy.deepcopy(master)
+    resume["sectionMeta"] = [{"key": "additional", "isVisible": False}]
+    result = keyword_score(
+        resume,
+        {
+            "required_skills": [
+                "リアルタイム分析",
+                "JavaScript",
+                "Java",
+                "SQL",
+                "research methods",
+            ]
+        },
+        master,
+    )
+
+    assert result["keyword_match_percentage"] == 40.0
+    assert result["sub_scores"]["skills_coverage"] == 40.0
+    assert result["injectable_keywords"] == ["SQL"]
+    assert result["missing_keywords"] == ["Java", "research methods"]
+
+
 class TestTitleMatch:
     def test_exact_title_in_headline_scores_full(self) -> None:
         assert compute_title_match(_resume(), JOB) == 100.0
