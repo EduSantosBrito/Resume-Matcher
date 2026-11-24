@@ -1,6 +1,7 @@
 'use client';
 
 import { SwissGrid } from '@/components/home/swiss-grid';
+import { VacancyDraft } from '@/components/dashboard/vacancy-draft';
 import { ResumeUploadDialog } from '@/components/dashboard/resume-upload-dialog';
 import { AgentPromptDialog, type AgentTask } from '@/components/agent/agent-prompt-dialog';
 import { useAgentRefresh } from '@/hooks/use-agent-refresh';
@@ -588,6 +589,7 @@ export default function DashboardPage() {
         )
       }
     >
+      <VacancyDraft />
       {!emptyWithError && (
         <>
           {/* 1. Master Resume Logic */}

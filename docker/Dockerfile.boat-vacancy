@@ -1,0 +1,15 @@
+FROM node:26.13.1-bookworm AS ui
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=/ NEXT_PUBLIC_REQUEST_TIMEOUT_MS=1800000
+WORKDIR /app/frontend
+COPY apps/frontend/package*.json ./
+RUN npm ci
+COPY apps/frontend/ ./
+RUN npm run lint && npm run build
+FROM resume-matcher:31f2e021-boat
+USER root
+RUN rm -rf /app/frontend
+COPY --from=ui --chown=appuser:appuser /app/frontend/.next/standalone /app/frontend/
+COPY --from=ui --chown=appuser:appuser /app/frontend/.next/static /app/frontend/.next/static/
+COPY --from=ui --chown=appuser:appuser /app/frontend/public /app/frontend/public/
+COPY --chown=appuser:appuser apps/backend/app /app/backend/app
+USER appuser
