@@ -146,9 +146,6 @@ app.add_middleware(
 app.add_middleware(HostGuardMiddleware, allowed_hosts=settings.effective_allowed_hosts)
 
 # Include routers
-from app.routers.vacancy_requests import router as vacancy_requests_router
-
-app.include_router(vacancy_requests_router, prefix="/api/v1")
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(config_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")

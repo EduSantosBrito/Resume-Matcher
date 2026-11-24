@@ -13,6 +13,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, field_validator
 
+from app import t3_tailoring
 from app.ai_budget import remaining_timeout
 from app.ai_limits import validate_prompt_size
 from app.chatgpt_auth import ChatGPTNotConnectedError
@@ -481,6 +482,8 @@ async def _route_acompletion(config: LLMConfig, transport: Any, **kwargs: Any) -
     rejects it. When the 400 says exactly that, retry once with
     ``max_completion_tokens``; every other error propagates unchanged.
     """
+    if t3_tailoring.job.get():
+        return await t3_tailoring.completion(kwargs["messages"])
     if not config.endpoint_confirmed:
         raise ValueError(
             "The API key is not confirmed for the saved Base URL. "
@@ -1109,6 +1112,8 @@ def get_router(config: LLMConfig | None = None) -> tuple[Router | None, LLMConfi
     """
     global _router, _router_config_key
 
+    if t3_tailoring.job.get():
+        return None, LLMConfig(provider="t3", model="gemini-4-neon", api_key="")
     if config is None:
         config = get_llm_config()
 
@@ -1896,7 +1901,7 @@ async def complete_json(
     # The ChatGPT plan route has no JSON mode to opt into: never send it, even
     # when the slug is in LiteLLM's registry. The prompt plus extraction and
     # retries below carry JSON for that provider, as for claude_cli.
-    use_json_mode = config.provider != "chatgpt" and (
+    use_json_mode = config.provider not in ("chatgpt", "t3") and (
         _supports_json_mode(model_name) or _openai_compatible_supports_json_mode(config)
     )
     json_mode_failed = False

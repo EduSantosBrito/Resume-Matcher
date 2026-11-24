@@ -76,6 +76,7 @@ from app.schemas.models import ResumeTemplate
 from app.schemas.refinement import RefinementConfig
 from app.schemas.writing import ApplyKeywordsRequest
 from app.schemas.writing_report import WritingReport
+from app import t3_tailoring
 from app.services.ats import compute_ats_score
 from app.services.bullet_selector import SELECTABLE_SECTIONS
 from app.services.cover_letter import (
@@ -156,6 +157,8 @@ async def _auto_create_tracker_application(
     Company/role come from the cached job (zero extra LLM call). Wrapped so a
     tracker failure can never break the tailoring flow.
     """
+    if t3_tailoring.job.get():
+        return  # Generating documents isn't an application.
     try:
         if title is None:
             saved_resume = await db.get_resume(tailored_resume_id)
@@ -758,7 +761,7 @@ async def _generate_auxiliary_messages(
     generation_tasks.append(generate_resume_title(job_content, language))
     task_labels.append("title")
 
-    if enable_cover_letter:
+    if enable_cover_letter or t3_tailoring.job.get():
         generation_tasks.append(
             generate_cover_letter(improved_data, job_content, language)
         )
@@ -812,6 +815,10 @@ async def _generate_auxiliary_messages(
             elif label == "interview_prep":
                 interview_prep = result
 
+    if t3_tailoring.job.get() and not cover_letter:
+        raise ValueError(
+            "T3 did not produce a cover letter; please retry confirmation."
+        )
     return cover_letter, outreach_message, title, interview_prep, warnings
 
 
@@ -1318,7 +1325,10 @@ async def improve_resume_preview_endpoint(
     prompt_id = request.prompt_id or _get_default_prompt_id()
 
     detail = "Failed to preview resume. Please try again."
-    with tracked_progress(request.progress_id, "load_job_keywords") as progress:
+    with (
+        t3_tailoring.for_job(request.job_id),
+        tracked_progress(request.progress_id, "load_job_keywords") as progress,
+    ):
         return await _run_preview_with_progress(
             request, resume, job, language, prompt_id, progress, detail
         )
@@ -1743,6 +1753,11 @@ async def _add_master_skills(master_id: str, keywords: list[str]) -> None:
 async def apply_keywords_endpoint(
     request: ApplyKeywordsRequest,
 ) -> ImproveResumeResponse:
+    with t3_tailoring.for_job(request.job_id):
+        return await _apply_keywords(request)
+
+
+async def _apply_keywords(request: ApplyKeywordsRequest) -> ImproveResumeResponse:
     """Work chosen job keywords into a preview; the result is a new preview.
 
     A keyword the master does not show is applied only with ``attested``.
@@ -1867,6 +1882,13 @@ async def apply_keywords_endpoint(
 
 @router.post("/improve/confirm", response_model=ImproveResumeResponse)
 async def improve_resume_confirm_endpoint(
+    request: ImproveResumeConfirmRequest,
+) -> ImproveResumeResponse:
+    with t3_tailoring.for_job(request.job_id):
+        return await _confirm_preview(request)
+
+
+async def _confirm_preview(
     request: ImproveResumeConfirmRequest,
 ) -> ImproveResumeResponse:
     """Confirm an accepted input snapshot once, with durable replay semantics."""
@@ -2063,6 +2085,13 @@ async def execute_tailoring_pipeline(
     resume_id: str,
     job_id: str,
     prompt_id: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], str, dict[str, Any]]:
+    with t3_tailoring.for_job(job_id):
+        return await _execute_tailoring_pipeline(resume_id, job_id, prompt_id)
+
+
+async def _execute_tailoring_pipeline(
+    resume_id: str, job_id: str, prompt_id: str | None
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], str, dict[str, Any]]:
     """Core tailoring pipeline for a single resume and job description.
 

@@ -1,0 +1,4 @@
+# Keep the original dashboard, tailor wizard and editor byte-for-byte.
+FROM resume-matcher:31f2e021-boat
+COPY --chown=appuser:appuser apps/backend/app/llm.py apps/backend/app/t3_tailoring.py /app/backend/app/
+COPY --chown=appuser:appuser apps/backend/app/routers/resumes.py /app/backend/app/routers/
