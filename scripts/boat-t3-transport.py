@@ -119,8 +119,11 @@ class Handler(socketserver.StreamRequestHandler):
             line = self.rfile.readline(2000000)
             if not line.endswith(b"\n"):
                 raise ValueError("size")
-            reply = answer(self.server.db, json.loads(line))
-            result = {"ok": True, "reply": reply}
+            request = json.loads(line)
+            if request == {"op": "ping"}:
+                result = {"ok": True, "reply": "pong"}
+            else:
+                result = {"ok": True, "reply": answer(self.server.db, request)}
         except Exception:
             result = {"ok": False}
         try:
@@ -132,7 +135,7 @@ class Handler(socketserver.StreamRequestHandler):
 if __name__ == "__main__":
     os.umask(0o077)
     ROOT.mkdir(mode=0o700, exist_ok=True)
-    sockets = ROOT / "socket"
+    sockets = Path(os.environ.get("RESUME_T3_SOCKET_DIR", ROOT / "socket"))
     sockets.mkdir(mode=0o700, exist_ok=True)
     path = sockets / "model.sock"
     path.unlink(missing_ok=True)

@@ -1,0 +1,20 @@
+[Unit]
+Description=Verify T3 transport from the Resume Matcher container at boot
+After=docker.service resume-t3-transport.service
+Requires=docker.service resume-t3-transport.service
+StartLimitIntervalSec=10min
+StartLimitBurst=20
+
+[Service]
+Type=oneshot
+User=user
+WorkingDirectory=/home/user/boat-services/resume
+StandardInput=file:/home/user/boat-services/resume/native-t3/scripts/check-boat-t3-transport.py
+ExecStart=/usr/bin/docker compose exec -T resume-matcher python -
+ExecStartPost=/bin/sh -c 'cd /tmp && /usr/bin/timeout 10 /usr/bin/sudo -n -u resume-t3 -H /usr/local/bin/resume-t3 thread list --base-dir /var/lib/resume-t3/state --project /var/lib/resume-t3/work --json >/dev/null'
+TimeoutStartSec=20
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

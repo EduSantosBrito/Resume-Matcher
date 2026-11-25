@@ -2,9 +2,11 @@
 Description=Local T3 model transport for Resume Matcher's native tailor flow
 After=resume-t3.service
 Requires=resume-t3.service
+RequiresMountsFor=/home/user/boat-services/resume/t3-transport
 
 [Service]
 User=user
+Environment=RESUME_T3_SOCKET_DIR=/run/resume-t3-transport
 WorkingDirectory=/tmp
 ExecStart=/usr/bin/python3 /home/user/boat-services/resume/native-t3/scripts/boat-t3-transport.py
 Restart=always
